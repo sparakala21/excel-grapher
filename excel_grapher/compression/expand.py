@@ -84,12 +84,16 @@ def inline_subexpression_refs(
     cse_bindings: Mapping[str, AstNode],
 ) -> AstNode:
     """Inline `_cse!` references using hoisted binding ASTs."""
-    return _transform_ast(
-        node,
-        lambda current: (
-            cse_bindings[current.ref_key] if isinstance(current, SubexpressionRefNode) else current
-        ),
-    )
+    while _contains_subexpression_refs(node):
+        node = _transform_ast(
+            node,
+            lambda current: (
+                cse_bindings[current.ref_key]
+                if isinstance(current, SubexpressionRefNode)
+                else current
+            ),
+        )
+    return node
 
 
 def shift_ast_to_cell(
@@ -113,6 +117,18 @@ def shift_ast_to_cell(
 
 def _is_cse_key(key: str) -> bool:
     return key.startswith(_CSE_KEY_PREFIX)
+
+
+def _contains_subexpression_refs(node: AstNode) -> bool:
+    if isinstance(node, SubexpressionRefNode):
+        return True
+    if isinstance(node, FunctionCallNode):
+        return any(_contains_subexpression_refs(arg) for arg in node.args)
+    if isinstance(node, BinaryOpNode):
+        return _contains_subexpression_refs(node.left) or _contains_subexpression_refs(node.right)
+    if isinstance(node, UnaryOpNode):
+        return _contains_subexpression_refs(node.operand)
+    return False
 
 
 def _column_index(column: str) -> int:

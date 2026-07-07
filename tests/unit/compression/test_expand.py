@@ -104,6 +104,20 @@ def test_expand_taco_rr_column_fill_down() -> None:
     assert expanded["Sheet1!D5"] == parse_formula("=Sheet1!B5*Sheet1!C5")
 
 
+def test_expand_inlines_nested_cse_bindings() -> None:
+    hoisted = parse_formula("=Sheet1!B1+Sheet1!C1")
+    nested_binding = BinaryOpNode("*", SubexpressionRefNode("_cse!0"), NumberNode(2.0))
+    compressed = {
+        "_cse!0": hoisted,
+        "_cse!1": nested_binding,
+        "Sheet1!A1": SubexpressionRefNode("_cse!1"),
+    }
+    expanded = expand_compressed_to_cells(compressed)
+    assert expanded == {
+        "Sheet1!A1": BinaryOpNode("*", hoisted, NumberNode(2.0)),
+    }
+
+
 def test_expand_mixed_parallel_cse_and_plain_cells() -> None:
     hoisted = parse_formula("=Sheet1!B1+Sheet1!C1")
     template = BinaryOpNode("*", SubexpressionRefNode("_cse!0"), NumberNode(2.0))

@@ -85,7 +85,22 @@ def test_hoist_fixpoint_second_round_hoists_over_cse_refs() -> None:
     assert fixpoint["Sheet1!A1"] == SubexpressionRefNode("_cse!1")
     assert fixpoint["Sheet1!A2"] == SubexpressionRefNode("_cse!1")
     assert fixpoint["Sheet1!A3"] == SubexpressionRefNode("_cse!1")
-    assert fixpoint["_cse!1"] == BinaryOpNode("*", SubexpressionRefNode("_cse!0"), NumberNode(2.0))
+    assert fixpoint["_cse!1"] == BinaryOpNode(
+        "*", parse_formula("=Sheet1!B1+Sheet1!C1"), NumberNode(2.0)
+    )
+
+
+def test_hoist_fixpoint_expand_parity_after_nested_cse_rounds() -> None:
+    original = _shared_sum_times_two_all_three()
+    after_first = _after_first_cse_round_with_ref_times_two()
+    second_pass, second_result = hoist_common_subexpressions_to_fixpoint(after_first)
+    assert second_result.cse_fixpoint_rounds == 1
+    assert expand_compressed_to_cells(second_pass) == original
+    assert_compression_parity(
+        original,
+        second_pass,
+        input_values={"Sheet1!B1": 2, "Sheet1!C1": 3},
+    )
 
 
 def test_hoist_fixpoint_expand_parity_after_two_rounds() -> None:

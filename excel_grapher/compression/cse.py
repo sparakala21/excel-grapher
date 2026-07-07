@@ -18,6 +18,7 @@ from excel_grapher.core.formula_ast import (
 
 from .ast_utils import merge_compressed_map, partition_compressed_map
 from .constant_folding import fold_literals_in_ast
+from .expand import inline_subexpression_refs
 from .stats import CompressionStats
 from .template_signature import TemplateSignature, template_signature
 from .types import CompressedNode
@@ -215,13 +216,14 @@ def apply_hoist(
     for cell_key, path in candidate.occurrences:
         paths_by_cell[cell_key].append(path)
 
+    bindings = _cse_bindings(cell_map)
     updated = dict(cell_map)
     for cell_key, paths in paths_by_cell.items():
         ast = updated[cell_key]
         for path in sorted(paths, key=len, reverse=True):
             ast = _replace_subtree_at_path(ast, path, ref)
         updated[cell_key] = ast
-    updated[key] = candidate.ast
+    updated[key] = inline_subexpression_refs(candidate.ast, bindings)
     return updated
 
 
@@ -232,8 +234,6 @@ def hoist_one_subexpression(
 ) -> tuple[dict[str, AstNode], CseResult]:
     """Hoist the best gated shared subtree once, or return the input unchanged."""
     config = config or CseConfig()
-    bindings = _cse_bindings(cell_map)
-    formula_cells = _formula_cells(cell_map)
     candidates = CseCandidate.from_cell_map(cell_map)
     passing: list[CseCandidate] = []
     rejected = 0
@@ -247,8 +247,7 @@ def hoist_one_subexpression(
 
     best = max(passing, key=net_ast_savings)
     key = allocate_cse_key(cell_map)
-    updated_formulas = apply_hoist(formula_cells, best, key)
-    return {**bindings, **updated_formulas}, CseResult(
+    return apply_hoist(cell_map, best, key), CseResult(
         binding_key=key,
         hoisted=True,
         binding_sites=1,
